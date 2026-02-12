@@ -54,13 +54,15 @@
 Arm_State ARM = {
     .mode = MODE_AUTO_REACH
 };
-extern IK_Result_t result;
-extern float target_pitch;
 //输入坐标
 char rx_buffer[64];  // 接收缓冲区
-uint8_t rx_data;     // 存放当前接收到的单个字符
+uint8_t rx_data;     // 存放接收的单个字符
 uint8_t rx_index = 0; // 缓冲区索引
-uint8_t rx_complete = 0; // 接收完成标志位
+uint8_t rx_complete = 0; //接收完成标志位
+//外部变量
+extern IK_Result_t result;
+// extern float target_pitch;
+extern float p_log;
 
 /* USER CODE END PV */
 
@@ -89,18 +91,34 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
     if (huart->Instance == USART1)
     {
-      if (rx_data == '\n' || rx_data == '\r' || rx_data == ';') 
-      {
-          rx_buffer[rx_index] = '\0';// 加上字符串结束符
-          rx_complete = 1;         
-          rx_index = 0;// 重置索引准备下一句
-      }
-      else
-      {
-          if (rx_index < 63)
-          {
-              rx_buffer[rx_index++] = rx_data;
-          }
+      switch(rx_data) {
+          case 'a':
+              ARM.mode = MODE_AUTO_REACH;
+              printf("Switched to MODE_AUTO_REACH\r\n");
+              break;
+          case 'f':
+              ARM.mode = MODE_GRAB_FLAT;
+              printf("Switched to MODE_GRAB_FLAT\r\n");
+              break;
+          case 'd':
+              ARM.mode = MODE_GRAB_DOWN;
+              printf("Switched to MODE_GRAB_DOWN\r\n");
+              break;
+          default:
+                if (rx_data == '\n' || rx_data == '\r' || rx_data == ';') 
+                {
+                    rx_buffer[rx_index] = '\0';// 加上字符串结束符
+                    rx_complete = 1;         
+                    rx_index = 0;// 重置索引准备下一句
+                }
+                else
+                {
+                    if (rx_index < 63)
+                    {
+                        rx_buffer[rx_index++] = rx_data;
+                    }
+                }
+              break;
       }
       HAL_UART_Receive_IT(&huart1, &rx_data, 1);
     }
@@ -186,7 +204,7 @@ int main(void)
           printf("Processing: [%s]\r\n", rx_buffer);
           printf("Target Received -> X:%.1f Y:%.1f Z:%.1f\r\n", target_x, target_y, target_z);
           servo_xyz(target_x, target_y, target_z, ARM.mode);
-          printf("=== Servo Angles ===\r\nJ0: %.2f | J1: %.2f | J2: %.2f\r\nJ3: %.2f | J4: %.2f | J5: %.2f | P: %.2f\r\n--------------------\r\n", result.j[0], result.j[1], result.j[2], result.j[3], result.j[4], result.j[5], target_pitch);
+          printf("=== Servo Angles ===\r\nJ0: %.2f | J1: %.2f | J2: %.2f\r\nJ3: %.2f | J4: %.2f | J5: %.2f | P: %.2f \r\n--------------------\r\n", result.j[0], result.j[1], result.j[2], result.j[3], result.j[4], result.j[5], p_log);
       }
       else
       {

@@ -5,14 +5,15 @@
 #include "tim.h"
 #include "math.h"
 #include "pca9685.h"
+#include <stdbool.h>
 
-#define angle_zero 500
+#define angle_zero 500.0f
 #define angle_rate 11.11111f
 // 硬件参数（单位：mm）
-#define L1 55.0f  // 底座底面到j2的高度
-#define L2 30.0f  // j2-j3长度
-#define L3 30.0f  // j3-j4长度
-#define L4 90.0f  // J4到夹爪末端长度
+#define L1 55.0f  // 底座底面到j1的高度
+#define L2 30.0f  // j1-j2长度
+#define L3 30.0f  // j2-j3长度
+#define L4 90.0f  // J3到夹爪末端长度
 #define M_PI 3.14159265358979323846f
 //修正值
 #define bias_0 0.0f
@@ -33,5 +34,6 @@ void servo_xyz(float x, float y, float z, IK_Mode mode);
 IK_Result_t IK_Solve_Core(float x, float y, float z, float pitch_deg);
 IK_Result_t IK_Get_Target_Angle(float x, float y, float z,  IK_Mode mode);
 float Constrain_Angle(float angle);
+bool Check_Angle_Valid(IK_Result_t r);
 
 #endif
