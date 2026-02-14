@@ -4,12 +4,12 @@ IK_Result_t result;
 
 void servo_init(void) {
     PCA9685_Init(50.0f);
-    PCA9685_SetServoAngle(0, 90);
-    PCA9685_SetServoAngle(1, 90);
-    PCA9685_SetServoAngle(2, 90);
-    PCA9685_SetServoAngle(3, 90); // 手腕
-    PCA9685_SetServoAngle(4, 90); // 旋转
-    PCA9685_SetServoAngle(5, 1500); // 夹爪
+    PCA9685_SetServoAngle(0, 90);//腰
+    PCA9685_SetServoAngle(1, 90);//肩
+    PCA9685_SetServoAngle(2, 90);//肘
+    PCA9685_SetServoAngle(3, 90);//腕上下
+    PCA9685_SetServoAngle(4, 90);//腕旋转
+    PCA9685_SetServoAngle(5, 1500);//夹爪
 }
 
 uint16_t servo_pwm_calculate(float angle)
@@ -26,10 +26,17 @@ void servo_xyz(float x, float y, float z, IK_Mode mode) {
 }
 
 IK_Result_t IK_Solve_Core(float x, float y, float z, float pitch_deg) {
+    bool is_negative_x = false;
+    if(x < 0){
+        is_negative_x = true;
+        x = -x;
+    }//镜像法模背面
+
     result.j[0] =90.0f - atan2f(y, x) * (180.0f / M_PI);
 
     float pitch_rad = pitch_deg * (M_PI / 180.0f);
-    float r_target = sqrtf(x*x + y*y);
+    float r_target = sqrtf(x*x + y*y) - bias_base;//j1不在底座中心，减去偏差值
+    if(is_negative_x) r_target = sqrtf(x*x + y*y) + bias_base; //背面加偏差值
     float r_wrist = r_target - L4 * cosf(pitch_rad);
     float z_wrist = (z - L1) - L4 * sinf(pitch_rad);
     float vector_len_sq = r_wrist * r_wrist + z_wrist * z_wrist;
@@ -54,6 +61,13 @@ IK_Result_t IK_Solve_Core(float x, float y, float z, float pitch_deg) {
     result.j[1] =180.0f - j2_math; 
 
     result.j[3] =360.0f - (pitch_deg + result.j[1] + result.j[2]);
+
+    if(is_negative_x){
+        result.j[0] = 180.0f - result.j[0];
+        result.j[1] = 180.0f - result.j[1];
+        result.j[2] = 180.0f - result.j[2];
+        result.j[3] = 180.0f - result.j[3];
+    }
 
     return result;
 }

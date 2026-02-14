@@ -10,10 +10,10 @@
 #define angle_zero 500.0f
 #define angle_rate 11.11111f
 // 硬件参数（单位：mm）
-#define L1 55.0f  // 底座底面到j1的高度
-#define L2 30.0f  // j1-j2长度
-#define L3 30.0f  // j2-j3长度
-#define L4 90.0f  // J3到夹爪末端长度
+#define L1 56.0f  // 底座底面到j1的高度
+#define L2 40.0f  // j1-j2长度
+#define L3 40.0f  // j2-j3长度
+#define L4 89.0f  // J3到夹爪末端长度
 #define M_PI 3.14159265358979323846f
 //修正值
 #define bias_0 0.0f
@@ -22,6 +22,7 @@
 #define bias_3 0.0f 
 #define bias_4 0.0f
 #define bias_5 0.0f
+#define bias_base 10.0f
 
 typedef struct {
     float j[6];//
