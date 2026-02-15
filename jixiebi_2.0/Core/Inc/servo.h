@@ -27,6 +27,9 @@
 typedef struct {
     float j[6];//
 } IK_Result_t;
+typedef struct {
+    float x, y, z;
+} FK_Result_t;
 
 void servo_init(void);
 IK_Result_t IK_Solve_Geometry(float x, float y, float z);
@@ -36,5 +39,6 @@ IK_Result_t IK_Solve_Core(float x, float y, float z, float pitch_deg);
 IK_Result_t IK_Get_Target_Angle(float x, float y, float z,  IK_Mode mode);
 float Constrain_Angle(float angle);
 bool Check_Angle_Valid(IK_Result_t r);
+FK_Result_t *FK_Solve_Core(float j0, float j1, float j2, float j3);
 
 #endif

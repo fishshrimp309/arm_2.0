@@ -1,6 +1,7 @@
 #include "servo.h"
 
 IK_Result_t result;
+FK_Result_t res[4];
 
 void servo_init(void) {
     PCA9685_Init(50.0f);
@@ -9,7 +10,7 @@ void servo_init(void) {
     PCA9685_SetServoAngle(2, 90);//Öâ
     PCA9685_SetServoAngle(3, 90);//ÍóÉÏÏÂ
     PCA9685_SetServoAngle(4, 90);//ÍóÐý×ª
-    PCA9685_SetServoAngle(5, 1500);//¼Ð×¦
+    PCA9685_SetServoAngle(5, 160);//¼Ð×¦
 }
 
 uint16_t servo_pwm_calculate(float angle)
@@ -51,7 +52,8 @@ IK_Result_t IK_Solve_Core(float x, float y, float z, float pitch_deg) {
     if (cos_angle_j3 < -1.0f) cos_angle_j3 = -1.0f;
     float j3_inner_angle = acosf(cos_angle_j3);
     float j3_math = j3_inner_angle * (180.0f / M_PI);
-    result.j[2] =180.0f - (180.0f - j3_math + 90.0f);
+    // result.j[2] =180.0f - (180.0f - j3_math + 90.0f);
+    result.j[2] =270.0f - j3_math;
 
     float j2_base_angle = atan2f(z_wrist, r_wrist);
     float cos_angle_j2_offset = (L2*L2 + vector_len_sq - L3*L3) / (2 * L2 * vector_len);
@@ -71,7 +73,6 @@ IK_Result_t IK_Solve_Core(float x, float y, float z, float pitch_deg) {
 
     return result;
 }
-
 
 float p_log;  
 IK_Result_t IK_Get_Target_Angle(float x, float y, float z,  IK_Mode mode) {
@@ -108,4 +109,29 @@ bool Check_Angle_Valid(IK_Result_t r) {
     if (r.j[2] < 0 || r.j[2] > 180) return false;
     if (r.j[3] < 0 || r.j[3] > 180) return false;
     return true;
+}
+
+
+FK_Result_t *FK_Solve_Core(float j0, float j1, float j2, float j3) {
+    
+    float j1_rad = (180.0f - j1) * (M_PI / 180.0f);
+    float j2_rad = (90.0f - (j1 - 90.0f + j2 - 90.0f)) * (M_PI / 180.0f);
+    float j3_rad = (90.0f - (j1 - 90.0f + j2 - 90.0f + j3 - 90.0f)) * (M_PI / 180.0f);
+    float x1 = bias_base;
+    float z1 = L1;
+    float x2 = x1 + L2 * cosf(j1_rad);
+    float z2 = z1 + L2 * sinf(j1_rad);
+    float x3 = x2 + L3 * cosf(j2_rad);
+    float z3 = z2 + L3 * sinf(j2_rad);
+    float x4 = x3 + L4 * cosf(j3_rad);
+    float z4 = z3 + L4 * sinf(j3_rad);
+    res[0].x = x1;
+    res[0].z = z1;
+    res[1].x = x2;
+    res[1].z = z2;
+    res[2].x = x3;
+    res[2].z = z3;
+    res[3].x = x4;
+    res[3].z = z4;
+    return res;
 }

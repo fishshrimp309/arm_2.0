@@ -54,11 +54,13 @@
 Arm_State ARM = {
     .mode = MODE_AUTO_REACH
 };
-//输入坐标
+//串口通信
 char rx_buffer[64];  // 接收缓冲区
 uint8_t rx_data;     // 存放接收的单个字符
 uint8_t rx_index = 0; // 缓冲区索引
 uint8_t rx_complete = 0; //接收完成标志位
+
+FK_Result_t* FK_result; //正解结果指针
 //外部变量
 extern IK_Result_t result;
 // extern float target_pitch;
@@ -184,7 +186,7 @@ int main(void)
   
   PCA9685_Init(50.0f);
   servo_init();
-  ARM.mode = MODE_AUTO_REACH;
+  ARM.mode = MODE_GRAB_FLAT;
   HAL_Delay(2000);
   HAL_UART_Receive_IT(&huart1, &rx_data, 1);
   printf("Ready!\r\n");
@@ -205,6 +207,8 @@ int main(void)
           printf("Target Received -> X:%.1f Y:%.1f Z:%.1f\r\n", target_x, target_y, target_z);
           servo_xyz(target_x, target_y, target_z, ARM.mode);
           printf("=== Servo Angles ===\r\nJ0: %.2f | J1: %.2f | J2: %.2f\r\nJ3: %.2f | J4: %.2f | J5: %.2f | P: %.2f \r\n--------------------\r\n", result.j[0], result.j[1], result.j[2], result.j[3], result.j[4], result.j[5], p_log);
+          FK_result = FK_Solve_Core(result.j[0], result.j[1], result.j[2], result.j[3]);
+          printf("%.2f|%.2f\n%.2f|%.2f\n%.2f|%.2f\n%.2f|%.2f\n--------------------\n", FK_result[0].x, FK_result[0].z, FK_result[1].x, FK_result[1].z, FK_result[2].x, FK_result[2].z, FK_result[3].x, FK_result[3].z);
       }
       else
       {
