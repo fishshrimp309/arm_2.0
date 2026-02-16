@@ -91,6 +91,7 @@ PUTCHAR_PROTOTYPE
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
+	HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13); 
     if (huart->Instance == USART1)
     {
       switch(rx_data) {
