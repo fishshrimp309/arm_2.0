@@ -47,9 +47,11 @@
 #define Z_MIN 0
 
 // 这是一个死区，手如果不怎么动（倾斜小于10度），坐标就不动，防止抖动
-#define DEAD_ZONE 10.0f 
+#define DEAD_ZONE 15.0f 
 // 移动速度系数
-#define SPEED_FACTOR 1.0f 
+#define SPEED_FACTOR 0.005f 
+
+#define Z_MODE_THRESHOLD 50.0f
 
 /* USER CODE END PD */
 
@@ -69,6 +71,9 @@ uint32_t last_send_time = 0;
 float Target_X = 10.0f; // 初始位置 X
 float Target_Y = 0.0f;   // 初始位置 Y
 float Target_Z = 225.0f; // 初始位置 Z
+float Last_Sent_X;
+float Last_Sent_Y;
+float Last_Sent_Z;
 
 /* USER CODE END PV */
 
@@ -95,36 +100,59 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
     }
 }
 
+float my_abs(float v) { return v > 0 ? v : -v; }
+
 void Calculate_Coordinate_From_Attitude(float pitch, float roll)
 {
-    // --- X轴控制 (基于 Pitch 俯仰) ---
-    // 假设：手向前倾 (Pitch > 10) -> X增加
-    //       手向后倾 (Pitch < -10) -> X减小
-    if (pitch > DEAD_ZONE) {
-        Target_X += (pitch - DEAD_ZONE) * 0.05f * SPEED_FACTOR;
-    } 
-    else if (pitch < -DEAD_ZONE) {
-        Target_X += (pitch + DEAD_ZONE) * 0.05f * SPEED_FACTOR;
+    float move_step = 0;
+
+    // --- 判断模式 ---
+    // 如果 Roll (横滚) 角度很大 (>50度)，说明手侧立起来了 -> 进入 Z轴模式
+    if (my_abs(roll) > Z_MODE_THRESHOLD) 
+    {
+        // === Z 轴控制模式 ===
+        // 这时候，利用 Pitch (前后倾斜) 来控制 Z 轴升降
+        if (my_abs(pitch) > DEAD_ZONE) 
+        {
+            move_step = (my_abs(pitch) - DEAD_ZONE) * SPEED_FACTOR;
+            if (pitch > 0) Target_Z -= move_step; // 低头 -> 下降
+            else           Target_Z += move_step; // 抬头 -> 上升
+        }
+    }
+    else 
+    {
+        // === XY 轴控制模式 (普通平放) ===
+        
+        // X轴 (Pitch控制)
+        if (my_abs(pitch) > DEAD_ZONE) 
+        {
+            // 现在的速度是动态的：倾斜角度越大，跑得越快
+            move_step = (my_abs(pitch) - DEAD_ZONE) * SPEED_FACTOR;
+            
+            if (pitch > 0) Target_X += move_step; // 低头 -> 前伸
+            else           Target_X -= move_step; // 抬头 -> 后缩
+        }
+
+        // Y轴 (Roll控制)
+        // 注意：这里 Roll 小于 50 度才会进来，所以要在 15~50 度之间控制 Y
+        if (my_abs(roll) > DEAD_ZONE) 
+        {
+            move_step = (my_abs(roll) - DEAD_ZONE) * SPEED_FACTOR;
+            
+            if (roll > 0) Target_Y += move_step; // 右翻 -> 右移
+            else          Target_Y -= move_step; // 左翻 -> 左移
+        }
     }
 
-    // --- Y轴控制 (基于 Roll 横滚) ---
-    // 假设：手向右翻 (Roll > 10) -> Y增加
-    //       手向左翻 (Roll < -10) -> Y减小
-    if (roll > DEAD_ZONE) {
-        Target_Y += (roll - DEAD_ZONE) * 0.05f * SPEED_FACTOR;
-    } 
-    else if (roll < -DEAD_ZONE) {
-        Target_Y += (roll + DEAD_ZONE) * 0.05f * SPEED_FACTOR;
-    }
-
-    // --- 范围限制 (防止算出非法坐标) ---
+    // --- 范围限位 (防止超程) ---
     if (Target_X > X_MAX) Target_X = X_MAX;
     if (Target_X < X_MIN) Target_X = X_MIN;
     
     if (Target_Y > Y_MAX) Target_Y = Y_MAX;
     if (Target_Y < Y_MIN) Target_Y = Y_MIN;
     
-    // Target_Z 暂时固定，或者你可以用 Yaw 来控制 Z，或者加按键
+    if (Target_Z > Z_MAX) Target_Z = Z_MAX;
+    if (Target_Z < Z_MIN) Target_Z = Z_MIN;
 }
 
 //// 发送坐标包给机械臂
@@ -212,29 +240,41 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-     if (MPU_Check_And_Read()) 
+	      // 1. 高频计算 (保证手感丝滑)
+    if (MPU_Check_And_Read()) 
     {
-        // 1. 根据当前姿态，计算下一步的坐标
         Calculate_Coordinate_From_Attitude(Pitch, Roll);
-     }   
-        // 2. 打印调试 (看看坐标变没变)
-//        printf("X:%.1f, Y:%.1f, P:%.1f, R:%.1f\r\n", Target_X, Target_Y, Pitch, Roll);
-        
-        // 3. 发送给机械臂 (机械臂收到这个XYZ后，直接跑逆运动学去抓取)
-//        Send_Coordinate_Packet(Target_X, Target_Y, Target_Z);
-			
-     if (HAL_GetTick() - last_send_time > 600) 
-    {
-        // 更新时间戳
-        last_send_time = HAL_GetTick();
-        
-        // 发送当前最新的坐标
-        // 这里的 Target_X 已经是经过几十次微小累加后的最新结果了
-		printf("x%.1f y%.1f z%.1f;", Target_X, Target_Y, Target_Z);
-        
-        // 可选：翻转一个 LED 提示发送状态
-        HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13); 
     }
+
+    // 2. 低频发送 (解耦控制)
+    // 只有当时间间隔 > 300ms 时才尝试发送
+    if (HAL_GetTick() - last_send_time > 300)
+    {
+        // 3. 变化检测 (解决“一直发送”的问题)
+        // 只有当坐标变化超过 2mm 时，才真正发给机械臂
+        if (my_abs(Target_X - Last_Sent_X) > 2.0f || 
+            my_abs(Target_Y - Last_Sent_Y) > 2.0f || 
+            my_abs(Target_Z - Last_Sent_Z) > 2.0f)
+        {
+            // 更新发送时间
+            last_send_time = HAL_GetTick();
+            
+            // 更新“上次坐标”
+            Last_Sent_X = Target_X;
+            Last_Sent_Y = Target_Y;
+            Last_Sent_Z = Target_Z;
+			
+			printf("x%.1f y%.1f z%.1f;", Target_X, Target_Y, Target_Z);
+        
+			// 可选：翻转一个 LED 提示发送状态
+			HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
+            
+            // 调试打印 (可选)
+            // printf("Sent: X%.0f Y%.0f Z%.0f\r\n", Target_X, Target_Y, Target_Z);
+        }
+    }
+ 
+    
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
