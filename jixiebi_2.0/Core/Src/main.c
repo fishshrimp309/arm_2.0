@@ -26,9 +26,12 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
+#include "stdio.h"
 #include "servo.h"
 #include "pca9685.h"
-#include "stdio.h"
+#include "bldc_driver.h"
+#include "as5600.h"
+#include "pid.h"
 
 /* USER CODE END Includes */
 
@@ -65,6 +68,13 @@ FK_Result_t* FK_result; //正解结果指针
 extern IK_Result_t result;
 // extern float target_pitch;
 extern float p_log;
+
+
+extern PID_Controller angle_pid;// 1. 实例化并初始化 PID 控制器
+extern BLDC_Driver_t motor_driver;
+extern AS5600_t encoder;
+extern float final_start_angle;
+float target_angle = 0.0f;
 
 /* USER CODE END PV */
 
@@ -161,36 +171,22 @@ int main(void)
   MX_I2C1_Init();
   MX_TIM6_Init();
   MX_USART1_UART_Init();
+  MX_TIM2_Init();
+  MX_I2C2_Init();
   /* USER CODE BEGIN 2 */
-  
-//  printf("\r\n=== STM32 Started ===\r\n"); // 打印一句，证明串口是活的
-//  // --- I2C 扫描测试开始 ---
-//  printf("Scanning I2C bus...\r\n");
-//  HAL_StatusTypeDef result;
-//  uint8_t i = 0;
-//  int device_found = 0;
-//  for (i = 1; i < 128; i++)
-//  {
-//      // 这里的 (i << 1) 是因为 HAL 库要把 7位地址左移一位
-//      result = HAL_I2C_IsDeviceReady(&hi2c1, (uint16_t)(i << 1), 2, 2); 
-//      if (result == HAL_OK)
-//      {
-//          printf("Found device at Address: 0x%02X\r\n", i);
-//          device_found = 1;
-//      }
-//  }
-//  if (device_found == 0) {
-//      printf("No I2C devices found! Check your wiring (SDA/SCL) and Power!\r\n");
-//  } else {
-//      printf("Scan done.\r\n");
-//  }
   
   PCA9685_Init(50.0f);
   servo_init();
+  BLDC_Init(&motor_driver, &htim2, 12.0f);
+  AS5600_Init(&encoder, &hi2c2);
+  BLDC_Enable();
+  PID_Init(&angle_pid, 1.5f, 0.2f, 1.0f, 3.0f);
+  uint32_t last_toggle_time = HAL_GetTick();
+  align_sensor(final_start_angle);
   ARM.mode = MODE_GRAB_FLAT;
   HAL_Delay(2000);
   HAL_UART_Receive_IT(&huart1, &rx_data, 1);
-  printf("Ready!\r\n");
+//  printf("Ready!\r\n");
   
   /* USER CODE END 2 */
 
@@ -198,18 +194,21 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-
+    if (HAL_GetTick() - last_toggle_time >= 2) {
+        last_toggle_time = HAL_GetTick();
+		Motor_GotoAngle(target_angle);
+	  }
     if (rx_complete)
     {
       float target_x, target_y, target_z;
       if (sscanf(rx_buffer, "x%f y%f z%f", &target_x, &target_y, &target_z) == 3)
       {
-          printf("Processing: [%s]\r\n", rx_buffer);
-          printf("Target Received -> X:%.1f Y:%.1f Z:%.1f\r\n", target_x, target_y, target_z);
+//          printf("Processing: [%s]\r\n", rx_buffer);
+//          printf("Target Received -> X:%.1f Y:%.1f Z:%.1f\r\n", target_x, target_y, target_z);
           servo_xyz(target_x, target_y, target_z, ARM.mode);
-          printf("=== Servo Angles ===\r\nJ0: %.2f | J1: %.2f | J2: %.2f\r\nJ3: %.2f | J4: %.2f | J5: %.2f | P: %.2f \r\n--------------------\r\n", result.j[0], result.j[1], result.j[2], result.j[3], result.j[4], result.j[5], p_log);
-          FK_result = FK_Solve_Core(result.j[0], result.j[1], result.j[2], result.j[3]);
-          printf("%.2f|%.2f\n%.2f|%.2f\n%.2f|%.2f\n%.2f|%.2f\n--------------------\n", FK_result[0].x, FK_result[0].z, FK_result[1].x, FK_result[1].z, FK_result[2].x, FK_result[2].z, FK_result[3].x, FK_result[3].z);
+//          printf("=== Servo Angles ===\r\nJ0: %.2f | J1: %.2f | J2: %.2f\r\nJ3: %.2f | J4: %.2f | J5: %.2f | P: %.2f \r\n--------------------\r\n", result.j[0], result.j[1], result.j[2], result.j[3], result.j[4], result.j[5], p_log);
+//          FK_result = FK_Solve_Core(result.j[0], result.j[1], result.j[2], result.j[3]);
+//          printf("%.2f|%.2f\n%.2f|%.2f\n%.2f|%.2f\n%.2f|%.2f\n--------------------\n", FK_result[0].x, FK_result[0].z, FK_result[1].x, FK_result[1].z, FK_result[2].x, FK_result[2].z, FK_result[3].x, FK_result[3].z);
       }
       else
       {

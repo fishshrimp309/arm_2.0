@@ -415,6 +415,36 @@
               <FilePath>..\Core\Src\pca9685.c</FilePath>
             </File>
             <File>
+              <FileName>as5600.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\Core\Inc\as5600.h</FilePath>
+            </File>
+            <File>
+              <FileName>as5600.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Core\Src\as5600.c</FilePath>
+            </File>
+            <File>
+              <FileName>bldc_driver.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\Core\Inc\bldc_driver.h</FilePath>
+            </File>
+            <File>
+              <FileName>bldc_driver.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Core\Src\bldc_driver.c</FilePath>
+            </File>
+            <File>
+              <FileName>pid.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\Core\Inc\pid.h</FilePath>
+            </File>
+            <File>
+              <FileName>pid.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Core\Src\pid.c</FilePath>
+            </File>
+            <File>
               <FileName>main.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Core/Src/main.c</FilePath>

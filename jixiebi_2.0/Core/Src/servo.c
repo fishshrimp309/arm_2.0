@@ -20,7 +20,7 @@ uint16_t servo_pwm_calculate(float angle)
 
 void servo_xyz(float x, float y, float z, IK_Mode mode) {
     result = IK_Get_Target_Angle(x, y, z, mode);
-	PCA9685_SetServoAngle(0, result.j[0] + bias_0); 
+//	PCA9685_SetServoAngle(0, result.j[0] + bias_0); 
 	PCA9685_SetServoAngle(1, result.j[1] + bias_1); 
 	PCA9685_SetServoAngle(2, result.j[2] + bias_2); 
 	PCA9685_SetServoAngle(3, result.j[3] + bias_3); 
