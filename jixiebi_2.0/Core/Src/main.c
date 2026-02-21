@@ -66,7 +66,6 @@ uint8_t rx_complete = 0; //接收完成标志位
 FK_Result_t* FK_result; //正解结果指针
 //外部变量
 extern IK_Result_t result;
-// extern float target_pitch;
 extern float p_log;
 
 
@@ -74,7 +73,6 @@ extern PID_Controller angle_pid;// 1. 实例化并初始化 PID 控制器
 extern BLDC_Driver_t motor_driver;
 extern AS5600_t encoder;
 extern float final_start_angle;
-float target_angle = 0.0f;
 
 /* USER CODE END PV */
 
@@ -87,23 +85,35 @@ void SystemClock_Config(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-// 支持 printf 的重定向代码
-#ifdef __GNUC__
-#define PUTCHAR_PROTOTYPE int __io_putchar(int ch)
-#else
-#define PUTCHAR_PROTOTYPE int fputc(int ch, FILE *f)
-#endif
-PUTCHAR_PROTOTYPE
+// // 支持 printf 的重定向代码
+// #ifdef __GNUC__
+// #define PUTCHAR_PROTOTYPE int __io_putchar(int ch)
+// #else
+// #define PUTCHAR_PROTOTYPE int fputc(int ch, FILE *f)
+// #endif
+// PUTCHAR_PROTOTYPE
+// {
+//    HAL_UART_Transmit(&huart1, (uint8_t *)&ch, 1, 0xFFFF);
+//    return ch;
+// }
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
-   HAL_UART_Transmit(&huart1, (uint8_t *)&ch, 1, 0xFFFF);
-   return ch;
+  if (htim->Instance == TIM6) {
+    if(result.ready) {
+        servo_xyz();
+        result.ready = 0;
+    }
+    Motor_GotoAngle(result.j[0]);
+  }
 }
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
-	HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13); 
+	
     if (huart->Instance == USART1)
     {
+      HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13); 
       switch(rx_data) {
           case 'a':
               ARM.mode = MODE_AUTO_REACH;
@@ -175,16 +185,17 @@ int main(void)
   MX_I2C2_Init();
   /* USER CODE BEGIN 2 */
   
+  
   PCA9685_Init(50.0f);
   servo_init();
   BLDC_Init(&motor_driver, &htim2, 12.0f);
   AS5600_Init(&encoder, &hi2c2);
   BLDC_Enable();
   PID_Init(&angle_pid, 1.5f, 0.2f, 1.0f, 3.0f);
-  uint32_t last_toggle_time = HAL_GetTick();
   align_sensor(final_start_angle);
   ARM.mode = MODE_GRAB_FLAT;
   HAL_Delay(2000);
+//  HAL_TIM_Base_Start_IT(&htim6);
   HAL_UART_Receive_IT(&huart1, &rx_data, 1);
 //  printf("Ready!\r\n");
   
@@ -194,10 +205,6 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    if (HAL_GetTick() - last_toggle_time >= 2) {
-        last_toggle_time = HAL_GetTick();
-		Motor_GotoAngle(target_angle);
-	  }
     if (rx_complete)
     {
       float target_x, target_y, target_z;
@@ -205,7 +212,11 @@ int main(void)
       {
 //          printf("Processing: [%s]\r\n", rx_buffer);
 //          printf("Target Received -> X:%.1f Y:%.1f Z:%.1f\r\n", target_x, target_y, target_z);
-          servo_xyz(target_x, target_y, target_z, ARM.mode);
+            IK_Result_t temporary = IK_Get_Target_Angle(target_x, target_y, target_z, ARM.mode);
+            for(int i = 0; i < 6; i++) {
+                result.j[i] = temporary.j[i];
+            }
+            result.ready = 1;
 //          printf("=== Servo Angles ===\r\nJ0: %.2f | J1: %.2f | J2: %.2f\r\nJ3: %.2f | J4: %.2f | J5: %.2f | P: %.2f \r\n--------------------\r\n", result.j[0], result.j[1], result.j[2], result.j[3], result.j[4], result.j[5], p_log);
 //          FK_result = FK_Solve_Core(result.j[0], result.j[1], result.j[2], result.j[3]);
 //          printf("%.2f|%.2f\n%.2f|%.2f\n%.2f|%.2f\n%.2f|%.2f\n--------------------\n", FK_result[0].x, FK_result[0].z, FK_result[1].x, FK_result[1].z, FK_result[2].x, FK_result[2].z, FK_result[3].x, FK_result[3].z);

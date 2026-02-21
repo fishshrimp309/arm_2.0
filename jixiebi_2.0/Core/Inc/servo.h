@@ -15,6 +15,7 @@
 #define L3 40.0f  // j2-j3长度
 #define L4 89.0f  // J3到夹爪末端长度
 #define M_PI 3.14159265358979323846f
+#define M_PI_2 1.57079632679489661923f   // pi/2
 //修正值
 #define bias_0 0.0f
 #define bias_1 0.0f
@@ -25,7 +26,8 @@
 #define bias_base 10.0f
 
 typedef struct {
-    float j[6];//
+    float j[6];
+    uint8_t ready;
 } IK_Result_t;
 typedef struct {
     float x, y, z;
@@ -34,7 +36,7 @@ typedef struct {
 void servo_init(void);
 IK_Result_t IK_Solve_Geometry(float x, float y, float z);
 uint16_t servo_pwm_calculate(float angle);
-void servo_xyz(float x, float y, float z, IK_Mode mode);
+void servo_xyz(void);
 IK_Result_t IK_Solve_Core(float x, float y, float z, float pitch_deg);
 IK_Result_t IK_Get_Target_Angle(float x, float y, float z,  IK_Mode mode);
 float Constrain_Angle(float angle);

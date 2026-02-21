@@ -52,6 +52,7 @@
 #define SPEED_FACTOR 0.005f 
 
 #define Z_MODE_THRESHOLD 50.0f
+#define SIDE_MODE_THRESHOLD 50.0f
 
 /* USER CODE END PD */
 
@@ -102,92 +103,118 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 
 float my_abs(float v) { return v > 0 ? v : -v; }
 
-void Calculate_Coordinate_From_Attitude(float pitch, float roll)
+//void Calculate_Coordinate_From_Attitude(float pitch, float roll)
+//{
+//    float move_step = 0;
+
+//    // --- 判断模式 ---
+//    // 如果 Roll (横滚) 角度很大 (>50度)，说明手侧立起来了 -> 进入 Z轴模式
+//    if (my_abs(roll) > Z_MODE_THRESHOLD) 
+//    {
+//        // === Z 轴控制模式 ===
+//        // 这时候，利用 Pitch (前后倾斜) 来控制 Z 轴升降
+//        if (my_abs(pitch) > DEAD_ZONE) 
+//        {
+//            move_step = (my_abs(pitch) - DEAD_ZONE) * SPEED_FACTOR;
+//            if (pitch > 0) Target_Z -= move_step; // 低头 -> 下降
+//            else           Target_Z += move_step; // 抬头 -> 上升
+//        }
+//    }
+//    else 
+//    {
+//        // === XY 轴控制模式 (普通平放) ===
+//        
+//        // X轴 (Pitch控制)
+//        if (my_abs(pitch) > DEAD_ZONE) 
+//        {
+//            // 现在的速度是动态的：倾斜角度越大，跑得越快
+//            move_step = (my_abs(pitch) - DEAD_ZONE) * SPEED_FACTOR;
+//            
+//            if (pitch > 0) Target_X += move_step; // 低头 -> 前伸
+//            else           Target_X -= move_step; // 抬头 -> 后缩
+//        }
+
+//        // Y轴 (Roll控制)
+//        // 注意：这里 Roll 小于 50 度才会进来，所以要在 15~50 度之间控制 Y
+//        if (my_abs(roll) > DEAD_ZONE) 
+//        {
+//            move_step = (my_abs(roll) - DEAD_ZONE) * SPEED_FACTOR;
+//            
+//            if (roll > 0) Target_Y += move_step; // 右翻 -> 右移
+//            else          Target_Y -= move_step; // 左翻 -> 左移
+//        }
+//    }
+
+//    // --- 范围限位 (防止超程) ---
+//    if (Target_X > X_MAX) Target_X = X_MAX;
+//    if (Target_X < X_MIN) Target_X = X_MIN;
+//    
+//    if (Target_Y > Y_MAX) Target_Y = Y_MAX;
+//    if (Target_Y < Y_MIN) Target_Y = Y_MIN;
+//    
+//    if (Target_Z > Z_MAX) Target_Z = Z_MAX;
+//    if (Target_Z < Z_MIN) Target_Z = Z_MIN;
+//}
+void Calculate_Coordinate_From_Attitude(float pitch, float roll, float yaw)
 {
     float move_step = 0;
-
-    // --- 判断模式 ---
-    // 如果 Roll (横滚) 角度很大 (>50度)，说明手侧立起来了 -> 进入 Z轴模式
-    if (my_abs(roll) > Z_MODE_THRESHOLD) 
+    
+    // --- 侧立模式判断 ---
+    // 初始状态 Roll 接近 90 或 -90。
+    // 如果 Roll 回正到了水平面（比如 < 40度），我们进入 XY 平面模式
+    // 否则（保持侧立），使用 Pitch 控制 X，用 Roll 的偏离量控制 Z
+    
+    if (my_abs(roll) > SIDE_MODE_THRESHOLD) // 保持侧立状态 (例如 THRESHOLD = 60)
     {
-        // === Z 轴控制模式 ===
-        // 这时候，利用 Pitch (前后倾斜) 来控制 Z 轴升降
+        // === 1. X 轴控制 (Pitch 前后倾斜) ===
         if (my_abs(pitch) > DEAD_ZONE) 
         {
             move_step = (my_abs(pitch) - DEAD_ZONE) * SPEED_FACTOR;
-            if (pitch > 0) Target_Z -= move_step; // 低头 -> 下降
-            else           Target_Z += move_step; // 抬头 -> 上升
+            // 侧立时，抬头/低头依然对应前后位移
+            if (pitch > 0) Target_X += move_step; 
+            else           Target_X -= move_step;
+        }
+
+        // === 2. Z 轴控制 (Roll 进一步侧倾或回正) ===
+        // 假设 90 度是标准垂直，Roll 往 100 度走是升，往 80 度走是降
+        float roll_offset = my_abs(roll) - 90.0f; 
+        
+        if (my_abs(roll_offset) > DEAD_ZONE)
+        {
+            move_step = (my_abs(roll_offset) - DEAD_ZONE) * SPEED_FACTOR;
+            // 如果 Roll 绝对值变大（更斜了）则上升，变小（向水平靠拢）则下降
+            if (roll_offset > 0) Target_Z -= move_step; 
+            else                Target_Z += move_step;
         }
     }
     else 
     {
-        // === XY 轴控制模式 (普通平放) ===
+//        // === 3. Y 轴控制模式 (当手放平以后) ===
+//        // 当 Roll 角度较小时，切换为控制 Y 轴（左右平移）
+//        if (my_abs(yaw) > DEAD_ZONE)
+//        {
+//            move_step = (my_abs(roll) - DEAD_ZONE) * SPEED_FACTOR;
+//            if (yaw > 0) Target_Y += move_step;
+//            else          Target_Y -= move_step;
+//        }
         
-        // X轴 (Pitch控制)
+        // 此模式下 Pitch 依然可以控制 X
         if (my_abs(pitch) > DEAD_ZONE) 
         {
-            // 现在的速度是动态的：倾斜角度越大，跑得越快
             move_step = (my_abs(pitch) - DEAD_ZONE) * SPEED_FACTOR;
-            
-            if (pitch > 0) Target_X += move_step; // 低头 -> 前伸
-            else           Target_X -= move_step; // 抬头 -> 后缩
-        }
-
-        // Y轴 (Roll控制)
-        // 注意：这里 Roll 小于 50 度才会进来，所以要在 15~50 度之间控制 Y
-        if (my_abs(roll) > DEAD_ZONE) 
-        {
-            move_step = (my_abs(roll) - DEAD_ZONE) * SPEED_FACTOR;
-            
-            if (roll > 0) Target_Y += move_step; // 右翻 -> 右移
-            else          Target_Y -= move_step; // 左翻 -> 左移
+            if (pitch > 0) Target_Y += move_step;
+            else           Target_Y -= move_step;
         }
     }
 
-    // --- 范围限位 (防止超程) ---
+    // --- 范围限位 (保持不变) ---
     if (Target_X > X_MAX) Target_X = X_MAX;
     if (Target_X < X_MIN) Target_X = X_MIN;
-    
     if (Target_Y > Y_MAX) Target_Y = Y_MAX;
     if (Target_Y < Y_MIN) Target_Y = Y_MIN;
-    
     if (Target_Z > Z_MAX) Target_Z = Z_MAX;
     if (Target_Z < Z_MIN) Target_Z = Z_MIN;
 }
-
-//// 发送坐标包给机械臂
-//void Send_Coordinate_Packet(float x, float y, float z)
-//{
-//    uint8_t data_buffer[11];
-//    
-//    // 坐标转整数 (mm)
-//    int16_t x_int = (int16_t)x;
-//    int16_t y_int = (int16_t)y;
-//    int16_t z_int = (int16_t)z;
-//    
-//    data_buffer[0] = 0xA5; // 帧头
-//    data_buffer[1] = 0x5A; 
-//    data_buffer[2] = 0x02; // 类型0x02代表坐标包 (与角度包区分)
-//    
-//    // X
-//    data_buffer[3] = x_int >> 8;
-//    data_buffer[4] = x_int & 0xFF;
-//    // Y
-//    data_buffer[5] = y_int >> 8;
-//    data_buffer[6] = y_int & 0xFF;
-//    // Z
-//    data_buffer[7] = z_int >> 8;
-//    data_buffer[8] = z_int & 0xFF;
-//    
-//    // 校验和
-//    uint8_t check_sum = 0;
-//    for(int i=0; i<9; i++) check_sum += data_buffer[i];
-//    data_buffer[9] = check_sum;
-//    
-//    data_buffer[10] = 0xAA; // 帧尾
-//    
-//    HAL_UART_Transmit(&huart1, data_buffer, 11, 0xFFFF);
-//}
 
 /* USER CODE END 0 */
 
@@ -243,7 +270,7 @@ int main(void)
 	      // 1. 高频计算 (保证手感丝滑)
     if (MPU_Check_And_Read()) 
     {
-        Calculate_Coordinate_From_Attitude(Pitch, Roll);
+        Calculate_Coordinate_From_Attitude(Pitch, Roll, Yaw);
     }
 
     // 2. 低频发送 (解耦控制)

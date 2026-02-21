@@ -1,11 +1,14 @@
 #include "servo.h"
 
-IK_Result_t result;
+IK_Result_t result = {
+    .j = {M_PI_2, 90.0f, 90.0f, 90.0f, 90.0f, 160.0f},
+    .ready = 0
+};
 FK_Result_t res[4];
 
 void servo_init(void) {
     PCA9685_Init(50.0f);
-    PCA9685_SetServoAngle(0, 90);//腰
+    // PCA9685_SetServoAngle(0, 90);//腰
     PCA9685_SetServoAngle(1, 90);//肩
     PCA9685_SetServoAngle(2, 90);//肘
     PCA9685_SetServoAngle(3, 90);//腕上下
@@ -18,8 +21,8 @@ uint16_t servo_pwm_calculate(float angle)
     return (uint16_t)(angle_zero + angle_rate * angle);
 }
 
-void servo_xyz(float x, float y, float z, IK_Mode mode) {
-    result = IK_Get_Target_Angle(x, y, z, mode);
+void servo_xyz(void) {
+    // result = IK_Get_Target_Angle(x, y, z, mode);
 //	PCA9685_SetServoAngle(0, result.j[0] + bias_0); 
 	PCA9685_SetServoAngle(1, result.j[1] + bias_1); 
 	PCA9685_SetServoAngle(2, result.j[2] + bias_2); 
@@ -33,7 +36,8 @@ IK_Result_t IK_Solve_Core(float x, float y, float z, float pitch_deg) {
         x = -x;
     }//镜像法模背面
 
-    result.j[0] =90.0f - atan2f(y, x) * (180.0f / M_PI);
+    // result.j[0] =90.0f - atan2f(y, x) * (180.0f / M_PI);
+    result.j[0] =M_PI_2 - atan2f(y, x);
 
     float pitch_rad = pitch_deg * (M_PI / 180.0f);
     float r_target = sqrtf(x*x + y*y) - bias_base;//j1不在底座中心，减去偏差值
@@ -65,7 +69,8 @@ IK_Result_t IK_Solve_Core(float x, float y, float z, float pitch_deg) {
     result.j[3] =360.0f - (pitch_deg + result.j[1] + result.j[2]);
 
     if(is_negative_x){
-        result.j[0] = 180.0f - result.j[0];
+//        result.j[0] = 180.0f - result.j[0];
+		result.j[0] = M_PI - result.j[0];
         result.j[1] = 180.0f - result.j[1];
         result.j[2] = 180.0f - result.j[2];
         result.j[3] = 180.0f - result.j[3];

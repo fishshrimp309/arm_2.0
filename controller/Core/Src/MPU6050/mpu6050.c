@@ -17,7 +17,7 @@
 #define q30  1073741824.0f
 
 short gyro[3], accel[3], sensors;
-float Pitch;
+//float Pitch;
 float q0 = 1.0f, q1 = 0.0f, q2 = 0.0f, q3 = 0.0f;
 static signed char gyro_orientation[9] = { -1, 0, 0, 0, -1, 0, 0, 0, 1 };
 
@@ -28,7 +28,13 @@ static signed char gyro_orientation[9] = { -1, 0, 0, 0, -1, 0, 0, 0, 1 };
 
 
 float Pitch, Roll, Yaw; 
+// 在文件开头，或者与 Pitch/Roll 同一地方定义全局变量
+float Filtered_Yaw = 0;  // 这是我们最终拿去用的、没有零飘的纯净 Yaw
+float Last_DMP_Yaw = 0;  // 记录上一次 DMP 算出的原始 Yaw
 
+// 死区阈值（度）。你需要根据循环速度和实际漂移情况微调这个值
+// 假设每次循环大概几毫秒，DMP自身漂移每次一般小于 0.05 度
+#define YAW_DEADZONE 0.2f
 
 
 
@@ -373,8 +379,44 @@ uint8_t MPU_Check_And_Read(void) {
             // 5. 计算欧拉角 (更新全局变量)
             Pitch = asin(-2 * q1 * q3 + 2 * q0 * q2) * 57.3f; 
             Roll  = atan2(2 * q2 * q3 + 2 * q0 * q1, -2 * q1 * q1 - 2 * q2 * q2 + 1) * 57.3f; 
-            Yaw   = atan2(2 * (q1 * q2 + q0 * q3), q0 * q0 + q1 * q1 - q2 * q2 - q3 * q3) * 57.3f;
-            
+            //Yaw   = atan2(2 * (q1 * q2 + q0 * q3), q0 * q0 + q1 * q1 - q2 * q2 - q3 * q3) * 57.3f;
+            // 不要直接赋给全局的 Yaw，先存到一个局部变量里
+			float raw_yaw = atan2(2 * (q1 * q2 + q0 * q3), q0 * q0 + q1 * q1 - q2 * q2 - q3 * q3) * 57.3f;
+		
+			
+			
+			
+			
+    // --- 新增：方法二 DMP 死区滤波抗零飘 ---
+    
+    // 1. 计算本次与上次的原始角度差值
+    float delta_yaw = raw_yaw - Last_DMP_Yaw;
+
+    // 2. 处理 -180 到 +180 度的死角跨越问题
+    // (例如从 179度 转到 -179度 时，实际只转了 2度，而不是 358度)
+    if (delta_yaw > 180.0f)  delta_yaw -= 360.0f;
+    if (delta_yaw < -180.0f) delta_yaw += 360.0f;
+
+    // 3. 应用死区判断！
+    // 绝对值如果大于死区，说明是真人在转动；如果小于，就是 DMP 的静止漂移，直接无视
+    if (delta_yaw > YAW_DEADZONE || delta_yaw < -YAW_DEADZONE) 
+    {
+        Filtered_Yaw += delta_yaw; // 累加有效转动量
+        
+        // 可选：限制 Filtered_Yaw 也在 -180 到 180 之间
+        if (Filtered_Yaw > 180.0f)  Filtered_Yaw -= 360.0f;
+        if (Filtered_Yaw < -180.0f) Filtered_Yaw += 360.0f;
+    }
+
+    // 4. 更新历史记录，供下一次循环使用
+    Last_DMP_Yaw = raw_yaw;
+
+    // 5. 把过滤后干净的 Yaw 赋值给全局变量，给你的机械臂控制函数用
+    Yaw = Filtered_Yaw;
+			
+	
+	
+	
             return 1;   // 返回 1 表示数据更新成功
         }
     }
