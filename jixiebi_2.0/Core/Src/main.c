@@ -32,11 +32,27 @@
 #include "bldc_driver.h"
 #include "as5600.h"
 #include "pid.h"
+#include "string.h"
 
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
+
+#pragma pack(push, 1)
+typedef struct {
+    uint8_t header1;    // 0xAA
+    uint8_t header2;    // 0x55
+    uint8_t mode;       // 0, 1, 2
+    float x;
+    float y;
+    float z;
+    float wrist;     
+    float gripper;//90~180度，大于90度闭合      
+    uint8_t checksum;
+    uint8_t tail;       // 0xEE
+} K230_Packet_t;
+#pragma pack(pop)
 
 /* USER CODE END PTD */
 
@@ -57,22 +73,30 @@
 Arm_State ARM = {
     .mode = MODE_AUTO_REACH
 };
-//串口通信
+//USART1
 char rx_buffer[64];  // 接收缓冲区
 uint8_t rx_data;     // 存放接收的单个字符
 uint8_t rx_index = 0; // 缓冲区索引
 uint8_t rx_complete = 0; //接收完成标志位
 
-FK_Result_t* FK_result; //正解结果指针
+//USART2
+uint8_t rx2_data;              // 单个字节接收缓存
+uint8_t rx2_buffer[sizeof(K230_Packet_t)]; // 完整数据帧缓存
+uint8_t rx2_index = 0;         // 接收索引
+uint8_t rx2_state = 0;         // 状态机状态
+volatile uint8_t k230_data_ready = 0; // K230数据就绪标志
+K230_Packet_t k230_data;
+
 //外部变量
 extern IK_Result_t result;
 extern float p_log;
-
 
 extern PID_Controller angle_pid;// 1. 实例化并初始化 PID 控制器
 extern BLDC_Driver_t motor_driver;
 extern AS5600_t encoder;
 extern float final_start_angle;
+
+FK_Result_t* FK_result; //正解结果指针
 
 /* USER CODE END PV */
 
@@ -145,6 +169,41 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
       }
       HAL_UART_Receive_IT(&huart1, &rx_data, 1);
     }
+
+    if (huart->Instance == USART2)
+    {
+        switch (rx2_state)
+        {
+            case 0: // 找帧头 1
+                if (rx2_data == 0xAA) { rx2_buffer[0] = rx2_data; rx2_state = 1; }
+                break;
+            case 1: // 找帧头 2
+                if (rx2_data == 0x55) { rx2_buffer[1] = rx2_data; rx2_index = 2; rx2_state = 2; }
+                else rx2_state = 0;
+                break;
+            case 2: // 接收数据体
+                rx2_buffer[rx2_index++] = rx2_data;
+                if (rx2_index >= sizeof(K230_Packet_t)) rx2_state = 3;
+                break;
+        }
+
+        if (rx2_state == 3)
+        {
+            if (rx2_buffer[sizeof(K230_Packet_t) - 1] == 0xEE)
+            {
+                uint8_t cal_checksum = 0;
+                for (int i = 2; i < 23; i++) cal_checksum += rx2_buffer[i]; // 算校验和
+                if (cal_checksum == rx2_buffer[15])
+                {
+                    memcpy(&k230_data, rx2_buffer, sizeof(K230_Packet_t));
+                    k230_data_ready = 1; 
+                }
+            }
+            rx2_state = 0;
+            rx2_index = 0;
+        }
+        HAL_UART_Receive_IT(&huart2, &rx2_data, 1);
+    }
 }
 
 /* USER CODE END 0 */
@@ -183,8 +242,8 @@ int main(void)
   MX_USART1_UART_Init();
   MX_TIM2_Init();
   MX_I2C2_Init();
+  MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-  
   
   PCA9685_Init(50.0f);
   servo_init();
@@ -195,9 +254,10 @@ int main(void)
   align_sensor(final_start_angle);
   ARM.mode = MODE_GRAB_FLAT;
   HAL_Delay(2000);
-//  HAL_TIM_Base_Start_IT(&htim6);
+  HAL_TIM_Base_Start_IT(&htim6);
   HAL_UART_Receive_IT(&huart1, &rx_data, 1);
-//  printf("Ready!\r\n");
+  HAL_UART_Receive_IT(&huart2, &rx_data, 1);
+//printf("Ready!\r\n");
   
   /* USER CODE END 2 */
 
@@ -205,28 +265,43 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+    if (k230_data_ready) 
+    {
+      k230_data_ready = 0; 
+
+      if(k230_data.mode == 0) ARM.mode = MODE_AUTO_REACH;
+      else if(k230_data.mode == 1) ARM.mode = MODE_GRAB_FLAT;
+      else if(k230_data.mode == 2) ARM.mode = MODE_GRAB_DOWN;
+
+      result = IK_Get_Target_Angle(k230_data.x, k230_data.y, k230_data.z, ARM.mode);
+      result.j[4] = k230_data.wrist;
+      result.j[5] = k230_data.gripper;
+      result.ready = 1; 
+    }
+
     if (rx_complete)
     {
+      rx_complete = 0;
       float target_x, target_y, target_z;
       if (sscanf(rx_buffer, "x%f y%f z%f", &target_x, &target_y, &target_z) == 3)
       {
-//          printf("Processing: [%s]\r\n", rx_buffer);
-//          printf("Target Received -> X:%.1f Y:%.1f Z:%.1f\r\n", target_x, target_y, target_z);
-            IK_Result_t temporary = IK_Get_Target_Angle(target_x, target_y, target_z, ARM.mode);
-            for(int i = 0; i < 6; i++) {
-                result.j[i] = temporary.j[i];
-            }
-            result.ready = 1;
-//          printf("=== Servo Angles ===\r\nJ0: %.2f | J1: %.2f | J2: %.2f\r\nJ3: %.2f | J4: %.2f | J5: %.2f | P: %.2f \r\n--------------------\r\n", result.j[0], result.j[1], result.j[2], result.j[3], result.j[4], result.j[5], p_log);
-//          FK_result = FK_Solve_Core(result.j[0], result.j[1], result.j[2], result.j[3]);
-//          printf("%.2f|%.2f\n%.2f|%.2f\n%.2f|%.2f\n%.2f|%.2f\n--------------------\n", FK_result[0].x, FK_result[0].z, FK_result[1].x, FK_result[1].z, FK_result[2].x, FK_result[2].z, FK_result[3].x, FK_result[3].z);
+//      printf("Processing: [%s]\r\n", rx_buffer);
+//      printf("Target Received -> X:%.1f Y:%.1f Z:%.1f\r\n", target_x, target_y, target_z);
+        IK_Result_t temporary = IK_Get_Target_Angle(target_x, target_y, target_z, ARM.mode);
+        for(int i = 0; i < 6; i++) {
+        result.j[i] = temporary.j[i];
+      }
+      result.ready = 1;
+//    printf("=== Servo Angles ===\r\nJ0: %.2f | J1: %.2f | J2: %.2f\r\nJ3: %.2f | J4: %.2f | J5: %.2f | P: %.2f \r\n--------------------\r\n", result.j[0], result.j[1], result.j[2], result.j[3], result.j[4], result.j[5], p_log);
+//    FK_result = FK_Solve_Core(result.j[0], result.j[1], result.j[2], result.j[3]);
+//    printf("%.2f|%.2f\n%.2f|%.2f\n%.2f|%.2f\n%.2f|%.2f\n--------------------\n", FK_result[0].x, FK_result[0].z, FK_result[1].x, FK_result[1].z, FK_result[2].x, FK_result[2].z, FK_result[3].x, FK_result[3].z);
       }
       else
       {
-          printf("Error Format! Please use: x100 y50 z20\r\n");
+        printf("Error, Please use: x100 y50 z20\r\n");
       }
       // memset(rx_buffer, 0, sizeof(rx_buffer));
-      rx_complete = 0;
+      
     }
 
     /* USER CODE END WHILE */
