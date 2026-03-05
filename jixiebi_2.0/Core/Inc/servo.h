@@ -10,20 +10,20 @@
 #define angle_zero 500.0f
 #define angle_rate 11.11111f
 // 硬件参数（单位：mm）
-#define L1 56.0f  // 底座底面到j1的高度
-#define L2 40.0f  // j1-j2长度
-#define L3 40.0f  // j2-j3长度
-#define L4 89.0f  // J3到夹爪末端长度
+#define L1 56.0f  // 底座底面到j1的高度90
+#define L2 40.0f  // j1-j2长度104
+#define L3 40.0f  // j2-j3长度126
+#define L4 89.0f  // J3到夹爪末端长度180
 #define M_PI 3.14159265358979323846f
 #define M_PI_2 1.57079632679489661923f   // pi/2
 //修正值
 #define bias_0 0.0f
-#define bias_1 0.0f
-#define bias_2 0.0f
-#define bias_3 0.0f 
+#define bias_1 -5.0f
+#define bias_2 45.0f
+#define bias_3 5.0f 
 #define bias_4 0.0f
 #define bias_5 0.0f
-#define bias_base 10.0f
+#define bias_base 0.0f
 
 typedef struct {
     float j[6];
@@ -40,7 +40,7 @@ void servo_xyz(void);
 IK_Result_t IK_Solve_Core(float x, float y, float z, float pitch_deg);
 IK_Result_t IK_Get_Target_Angle(float x, float y, float z,  IK_Mode mode);
 float Constrain_Angle(float angle);
-bool Check_Angle_Valid(IK_Result_t r);
+bool Check_Angle_Valid(IK_Result_t r,float z);
 FK_Result_t *FK_Solve_Core(float j0, float j1, float j2, float j3);
 
 #endif

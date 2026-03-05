@@ -27,12 +27,17 @@
 /* USER CODE BEGIN Includes */
 
 #include "stdio.h"
+#include "string.h"
 #include "servo.h"
 #include "pca9685.h"
-#include "bldc_driver.h"
-#include "as5600.h"
-#include "pid.h"
-#include "string.h"
+#include "Motor.h"
+#include "Encoder.h"
+#include "PID_M.h"
+#include "MPU6050.h"
+
+// #include "bldc_driver.h"
+// #include "as5600.h"
+// #include "pid.h"
 
 /* USER CODE END Includes */
 
@@ -91,12 +96,17 @@ K230_Packet_t k230_data;
 extern IK_Result_t result;
 extern float p_log;
 
-extern PID_Controller angle_pid;// 1. 实例化并初始化 PID 控制器
-extern BLDC_Driver_t motor_driver;
-extern AS5600_t encoder;
-extern float final_start_angle;
+////无刷电机
+//extern PID_Controller angle_pid;// 1. 实例化并初始化 PID 控制器
+//extern BLDC_Driver_t motor_driver;
+//extern AS5600_t encoder;
+//extern float final_start_angle;
 
 FK_Result_t* FK_result; //正解结果指针
+
+//底盘
+volatile float CurrentYaw = 0.0f;      // 当前总偏航角 (积分得到)
+extern Motor_Speed_t motor_speed;
 
 /* USER CODE END PV */
 
@@ -109,26 +119,30 @@ void SystemClock_Config(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-// // 支持 printf 的重定向代码
-// #ifdef __GNUC__
-// #define PUTCHAR_PROTOTYPE int __io_putchar(int ch)
-// #else
-// #define PUTCHAR_PROTOTYPE int fputc(int ch, FILE *f)
-// #endif
-// PUTCHAR_PROTOTYPE
-// {
-//    HAL_UART_Transmit(&huart1, (uint8_t *)&ch, 1, 0xFFFF);
-//    return ch;
-// }
+// 支持 printf 的重定向代码
+#ifdef __GNUC__
+#define PUTCHAR_PROTOTYPE int __io_putchar(int ch)
+#else
+#define PUTCHAR_PROTOTYPE int fputc(int ch, FILE *f)
+#endif
+PUTCHAR_PROTOTYPE
+{
+   HAL_UART_Transmit(&huart1, (uint8_t *)&ch, 1, 0xFFFF);
+   return ch;
+}
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
+//  float gyro_z = MPU_Get_Gyro_Z();
+//  CurrentYaw += gyro_z * 0.01f; 
+
   if (htim->Instance == TIM6) {
-    if(result.ready) {
+//    if(result.ready) {
         servo_xyz();
         result.ready = 0;
-    }
-    Motor_GotoAngle(result.j[0]);
+//    }
+//	  Motor_SetSpeed_PWM(motor_speed.left_pwm, motor_speed.right_pwm);
+//    Motor_GotoAngle(result.j[0]);
   }
 }
 
@@ -156,7 +170,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
                 {
                     rx_buffer[rx_index] = '\0';// 加上字符串结束符
                     rx_complete = 1;         
-                    rx_index = 0;// 重置索引准备下一句
+                    rx_index = 0;
                 }
                 else
                 {
@@ -243,21 +257,24 @@ int main(void)
   MX_TIM2_Init();
   MX_I2C2_Init();
   MX_USART2_UART_Init();
+  MX_TIM3_Init();
+  MX_TIM4_Init();
+  MX_TIM8_Init();
   /* USER CODE BEGIN 2 */
   
   PCA9685_Init(50.0f);
   servo_init();
-  BLDC_Init(&motor_driver, &htim2, 12.0f);
-  AS5600_Init(&encoder, &hi2c2);
-  BLDC_Enable();
-  PID_Init(&angle_pid, 1.5f, 0.2f, 1.0f, 3.0f);
-  align_sensor(final_start_angle);
+//  BLDC_Init(&motor_driver, &htim2, 12.0f);
+//  AS5600_Init(&encoder, &hi2c2);
+//  BLDC_Enable();
+//  PID_Init(&angle_pid, 1.5f, 0.2f, 1.0f, 3.0f);
+//  align_sensor(final_start_angle);
   ARM.mode = MODE_GRAB_FLAT;
   HAL_Delay(2000);
   HAL_TIM_Base_Start_IT(&htim6);
   HAL_UART_Receive_IT(&huart1, &rx_data, 1);
   HAL_UART_Receive_IT(&huart2, &rx_data, 1);
-//printf("Ready!\r\n");
+  printf("Ready!\r\n");
   
   /* USER CODE END 2 */
 
@@ -265,44 +282,46 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    if (k230_data_ready) 
-    {
-      k230_data_ready = 0; 
+     if (k230_data_ready) 
+     {
+       k230_data_ready = 0; 
 
-      if(k230_data.mode == 0) ARM.mode = MODE_AUTO_REACH;
-      else if(k230_data.mode == 1) ARM.mode = MODE_GRAB_FLAT;
-      else if(k230_data.mode == 2) ARM.mode = MODE_GRAB_DOWN;
+       if(k230_data.mode == 0) ARM.mode = MODE_AUTO_REACH;
+       else if(k230_data.mode == 1) ARM.mode = MODE_GRAB_FLAT;
+       else if(k230_data.mode == 2) ARM.mode = MODE_GRAB_DOWN;
 
-      result = IK_Get_Target_Angle(k230_data.x, k230_data.y, k230_data.z, ARM.mode);
-      result.j[4] = k230_data.wrist;
-      result.j[5] = k230_data.gripper;
-      result.ready = 1; 
-    }
+       result = IK_Get_Target_Angle(k230_data.x, k230_data.y, k230_data.z, ARM.mode);
+//	   result = IK_Get_Target_Angle(200.0, 0.0, 200.0, ARM.mode);
+       result.j[4] = k230_data.wrist;
+       result.j[5] = k230_data.gripper;
+       result.ready = 1; 
+     }
+     motor_speed = Motor_GetPWM(result.j[0], CurrentYaw);
 
-    if (rx_complete)
-    {
-      rx_complete = 0;
-      float target_x, target_y, target_z;
-      if (sscanf(rx_buffer, "x%f y%f z%f", &target_x, &target_y, &target_z) == 3)
-      {
-//      printf("Processing: [%s]\r\n", rx_buffer);
-//      printf("Target Received -> X:%.1f Y:%.1f Z:%.1f\r\n", target_x, target_y, target_z);
-        IK_Result_t temporary = IK_Get_Target_Angle(target_x, target_y, target_z, ARM.mode);
-        for(int i = 0; i < 6; i++) {
-        result.j[i] = temporary.j[i];
-      }
-      result.ready = 1;
-//    printf("=== Servo Angles ===\r\nJ0: %.2f | J1: %.2f | J2: %.2f\r\nJ3: %.2f | J4: %.2f | J5: %.2f | P: %.2f \r\n--------------------\r\n", result.j[0], result.j[1], result.j[2], result.j[3], result.j[4], result.j[5], p_log);
-//    FK_result = FK_Solve_Core(result.j[0], result.j[1], result.j[2], result.j[3]);
-//    printf("%.2f|%.2f\n%.2f|%.2f\n%.2f|%.2f\n%.2f|%.2f\n--------------------\n", FK_result[0].x, FK_result[0].z, FK_result[1].x, FK_result[1].z, FK_result[2].x, FK_result[2].z, FK_result[3].x, FK_result[3].z);
-      }
-      else
-      {
-        printf("Error, Please use: x100 y50 z20\r\n");
-      }
-      // memset(rx_buffer, 0, sizeof(rx_buffer));
+     if (rx_complete)
+     {
+       rx_complete = 0;
+       float target_x, target_y, target_z;
+       if (sscanf(rx_buffer, "x%f y%f z%f", &target_x, &target_y, &target_z) == 3)
+       {
+         printf("Processing: [%s]\r\n", rx_buffer);
+         printf("Target Received -> X:%.1f Y:%.1f Z:%.1f\r\n", target_x, target_y, target_z);
+         IK_Result_t temporary = IK_Get_Target_Angle(target_x, target_y, target_z, ARM.mode);
+         for(int i = 0; i < 6; i++) {
+         result.j[i] = temporary.j[i];
+       }
+       result.ready = 1;
+       printf("=== Servo Angles ===\r\nJ0: %.2f | J1: %.2f | J2: %.2f\r\nJ3: %.2f | J4: %.2f | J5: %.2f | P: %.2f \r\n--------------------\r\n", result.j[0], result.j[1], result.j[2], result.j[3], result.j[4], result.j[5], p_log);
+       FK_result = FK_Solve_Core(result.j[0], result.j[1], result.j[2], result.j[3]);
+       printf("%.2f|%.2f\n%.2f|%.2f\n%.2f|%.2f\n%.2f|%.2f\n--------------------\n", FK_result[0].x, FK_result[0].z, FK_result[1].x, FK_result[1].z, FK_result[2].x, FK_result[2].z, FK_result[3].x, FK_result[3].z);
+ 	  }
+       else
+       {
+         printf("Error, Please use: x100 y50 z20\r\n");
+       }
+       // memset(rx_buffer, 0, sizeof(rx_buffer));
       
-    }
+     }
 
     /* USER CODE END WHILE */
 
