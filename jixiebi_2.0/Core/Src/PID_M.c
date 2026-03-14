@@ -19,15 +19,6 @@ void PID_Init(PID_Type *pid, float kp, float ki, float kd, float max_output, flo
 
 float PID_Calculate(PID_Type *pid, float target_speed, float actual_speed)
 {
-    // === 新增：强制停车逻辑 ===
-    // 如果目标是0，直接返回0，并清空积分，实现“刹车”效果
-    if (fabs(target_speed) < 0.1f) {
-        pid->Integral = 0.0f;
-        pid->LastError = 0.0f;
-        pid->PwmOutput = 0.0f;
-        return 0.0f;
-    }
-
     // 1. 计算误差
     pid->TargetSpeed = target_speed;
     pid->ActualSpeed = actual_speed;

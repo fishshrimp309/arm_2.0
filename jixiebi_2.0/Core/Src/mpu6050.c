@@ -74,7 +74,7 @@ float MPU_Get_Gyro_Z(void) {
     gyro_dps = raw_float / 16.4f; 
     
     // 简单的死区过滤，消除静止时的微小跳动
-    if(fabs(gyro_dps) < 0.5f) gyro_dps = 0.0f;
+    if(fabs(gyro_dps) < 1.0f) gyro_dps = 0.0f;
 
     return gyro_dps; 
 }

@@ -188,10 +188,10 @@ void MX_TIM6_Init(void)
 
   /* USER CODE END TIM6_Init 1 */
   htim6.Instance = TIM6;
-  htim6.Init.Prescaler = 16;
+  htim6.Init.Prescaler = 169;
   htim6.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim6.Init.Period = 19999;
-  htim6.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
+  htim6.Init.Period = 9999;
+  htim6.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim6) != HAL_OK)
   {
     Error_Handler();
@@ -399,7 +399,14 @@ void HAL_TIM_MspPostInit(TIM_HandleTypeDef* timHandle)
     PA4     ------> TIM3_CH2
     PA6     ------> TIM3_CH1
     */
-    GPIO_InitStruct.Pin = GPIO_PIN_4|GPIO_PIN_6;
+    GPIO_InitStruct.Pin = GPIO_PIN_4;
+    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+    GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+    GPIO_InitStruct.Alternate = GPIO_AF2_TIM3;
+    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+    GPIO_InitStruct.Pin = GPIO_PIN_6;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;

@@ -18,9 +18,9 @@
 #define M_PI_2 1.57079632679489661923f   // pi/2
 //ĞŞÕıÖµ
 #define bias_0 0.0f
-#define bias_1 -5.0f
-#define bias_2 45.0f
-#define bias_3 5.0f 
+#define bias_1 -10.0f
+#define bias_2 40.0f
+#define bias_3 0.0f 
 #define bias_4 0.0f
 #define bias_5 0.0f
 #define bias_base 0.0f

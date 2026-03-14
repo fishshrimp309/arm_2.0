@@ -9,11 +9,11 @@ FK_Result_t res[4];
 void servo_init(void) {
     PCA9685_Init(50.0f);
     // PCA9685_SetServoAngle(0, 90);//?ü
-    PCA9685_SetServoAngle(1, 85);//??
-    PCA9685_SetServoAngle(2, 135);//??
-    PCA9685_SetServoAngle(3, 95);//?ó????
-    PCA9685_SetServoAngle(4, 90);//?ó??×?
-    PCA9685_SetServoAngle(5, 160);//??×?
+    PCA9685_SetServoAngle(1, result.j[1] + bias_1);//??
+    PCA9685_SetServoAngle(2, result.j[2] + bias_2);//??
+    PCA9685_SetServoAngle(3, result.j[3] + bias_3);//?ó????
+    PCA9685_SetServoAngle(4, result.j[4] + bias_4);//?ó??×?
+    PCA9685_SetServoAngle(5, result.j[5] + bias_5);//??×?
 }
 
 uint16_t servo_pwm_calculate(float angle)
@@ -36,8 +36,9 @@ IK_Result_t IK_Solve_Core(float x, float y, float z, float pitch_deg) {
 //        x = -x;
 //    }
 
-    result.j[0] =90.0f - atan2f(y, x) * (180.0f / M_PI);
+//    result.j[0] =90.0f - atan2f(y, x) * (180.0f / M_PI);
 //    result.j[0] =M_PI_2 - atan2f(y, x);//无刷电机
+	    result.j[0] =atan2f(y, x) * (180.0f / M_PI);//小车
 
     float pitch_rad = pitch_deg * (M_PI / 180.0f);
     float r_target = sqrtf(x*x + y*y) - bias_base;//j1?????××ù????????????????
